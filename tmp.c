@@ -2,18 +2,63 @@
 #include <stdlib.h>
 #include <setjmp.h>
 
-#define SPAWN_THREAD_1(CB) {\
+#define MAXTHREADS 10
+
+#define SPAWN_THREAD(CB) {\
+  if (threadnum == MAXTHREADS - 1){\
+    printf("Too many threads! Max is MAXTHREADS");\
+  }\
+  if (threadnum == 0){\
+    if (!setjmp(after_schedule)){\
+      init_thread_start_spot();\
+    }\
+  }\
   if (!setjmp(after_schedule)){\
-    spawn_thread_1(&CB);\
+    recursive_pad(threadnum, &CB);\
   }\
 }\
 
+typedef void (callback)(void);
+
+static jmp_buf thread_start_spot;
 static jmp_buf scheduler_buf;
 static jmp_buf after_schedule;
 static jmp_buf saved_thread;
 static int threadnum; // initialized to 0
+static callback *cur_callback;
 
-typedef void (callback)(void);
+
+void init_thread_start_spot_after_spacing(void){
+  printf("created thread space 1000 bytes beyond thread init\n");
+  char space[1000];
+  space[1000-1] = 'a';
+  run_cb_then_longjump_to(cb, after_schedule);
+}
+
+// Allocate n*1000 bytes of stack space
+void recursive_pad(int n, callback cb){
+  char space[1000];
+  space[1000-1] = 'a';
+  if (n == 1){
+    if (!setjmp(saved_thread)){
+      printf("created jmp_buf for thread %d\n", threadnum);
+      longjmp(after_schedule, 1);
+    } else {
+      (*cb)();
+    }
+  } else {
+    recursive_pad(n-1, cb);
+  }
+}
+
+void init_thread_start_spot(){
+  int n = setjmp(thread_start_spot);
+  if (n == 0){
+    longjmp(after_schedule, 1);
+  } else {
+    recursive_pad(threadnum, cur_callback);
+  }
+}
 
 void yield(){
   if (!setjmp(saved_thread)){
@@ -33,12 +78,9 @@ void run_cb_then_longjump_to(callback *cb, jmp_buf jb){
   longjmp(scheduler_buf, 2);
 }
 
-void spawn_thread_1(callback *cb){
-  printf("created thread 1 space 1000 bytes beyond spawn_thread\n");
-  char space[1000];
-  space[1000-1] = 'a';
-  printf("about to schedule thread!\n");
-  run_cb_then_longjump_to(cb, after_schedule);
+void spawn_thread(callback *cb, n){
+  cur_callback = cb;
+  longjmp(thread_start_spot, n);
 }
 
 void hello(void){
@@ -67,7 +109,7 @@ void run_threads() {
 }
 
 int main() {
-  SPAWN_THREAD_1(hello);
+  SPAWN_THREAD(hello);
   run_threads();
   return 0;
 }
