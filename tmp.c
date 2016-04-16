@@ -2,6 +2,12 @@
 #include <stdlib.h>
 #include <setjmp.h>
 
+#define SPAWN_THREAD_1(CB) {\
+  if (!setjmp(after_schedule)){\
+    spawn_thread_1(&CB);\
+  }\
+}\
+
 static jmp_buf scheduler_buf;
 static jmp_buf after_schedule;
 static jmp_buf saved_thread;
@@ -61,9 +67,7 @@ void run_threads() {
 }
 
 int main() {
-  if (!setjmp(after_schedule)){
-    spawn_thread_1(&hello);
-  }
+  SPAWN_THREAD_1(hello);
   run_threads();
   return 0;
 }
